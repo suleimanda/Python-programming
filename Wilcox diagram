@@ -1,0 +1,127 @@
+import pandas as pd
+import numpy as np
+
+df = pd.read_excel('/Users/suleiman/My Drive/Biostatseasy.com/Wilcox job/irrigation water quality data2.xlsx')
+
+df_transposed = df.transpose()
+df_transposed
+df_transposed = df_transposed.iloc[1:]  
+df_transposed = df_transposed.drop (df_transposed.columns[[2]], axis=1) # Drop columns based on index positions
+df_transposed.columns = df_transposed.iloc[0]  # Get values from first row
+df_transposed = df_transposed.iloc[1:]         # Remove the first row
+df_transposed = df_transposed.rename(columns={df_transposed.columns[0]: 'month'})
+df_transposed
+# Create the repeated list of months
+months = ['NOVEMBER, 2024', 'DECEMBER, 2024', 'JANUARY, 2025', 'FEBRUARY, 2025', 'MARCH, 2025']
+month_column = np.repeat(months, 9)
+month_column
+
+site = ['SITE A (Omi Junction)', 'SITE B (Perera Bridge)', 'SITE C (Oko-Ojuawo)']
+site_column = np.tile(np.repeat(site, 3), 5)
+site_column
+
+df_transposed['month'] = month_column
+df_transposed
+
+df_transposed['PCA Water'] = site_column
+df_transposed
+
+df_transposed = df_transposed.rename(columns={'PCA Water': 'site', 'pH ': 'pH'})
+df_transposed
+df_transposed = df_transposed.reset_index(drop=True)
+df_transposed
+
+print(df_transposed.columns.tolist())  # List all column names
+
+df_siteA = df_transposed[df_transposed['site'] == 'SITE A (Omi Junction)']
+df_siteA
+
+df_siteA = df_siteA.drop(columns=['site', 'month'], axis =1) # Drop columns based on index positions
+df_siteA
+
+
+# US SALINITY LABORATORY DIAGRAMS
+
+import matplotlib.pyplot as plt
+
+# === Create figure ===
+fig, ax = plt.subplots(figsize=(8, 6))
+ax.set_xlim(0, 5000)
+ax.set_ylim(0, 40)
+
+# === SAR diagonal classification lines ===
+# Define points that span the full EC range
+sar_lines = [
+    ((0, 10), (5000, 2.1)),
+    ((0, 18), (5000, 5)),
+    ((0, 26), (5000, 8)),
+]
+
+for (x1, y1), (x2, y2) in sar_lines:
+    ax.plot([x1, x2], [y1, y2], linestyle='-', linewidth=1, color='black')
+
+# === Vertical EC category borders ===
+ec_borders = [250, 750, 2250, 5000]
+for x in ec_borders:
+    ax.axvline(x=x, linestyle='-', linewidth=1, color='gray')
+
+# === Plot your data using actual EC values ===
+ax.scatter(
+    siteA_diagram_df['Electrical Conductivity (µohms/cm)'],
+    siteA_diagram_df['SAR'],
+    color='blue',
+    s=30,
+    label='Site A', linewidth=0.5
+)
+
+# === Plot Site B data (added new dataset) ===
+ax.scatter(
+    siteB_diagram_df['Electrical Conductivity (µohms/cm)'],
+    siteB_diagram_df['SAR'],
+    color='red',  # Different color for distinction
+    s=30,
+    marker='x',   # Optional: Use a different marker (e.g., triangle)
+    label='Site B', linewidth=0.5
+)
+
+# === Plot Site C data (added new dataset) ===
+ax.scatter(
+    siteC_diagram_df['Electrical Conductivity (µohms/cm)'],
+    siteC_diagram_df['SAR'],
+    color='green',  # Different color for distinction
+    s=30,
+    marker='^',   # Optional: Use a different marker (e.g., triangle)
+    label='Site C', linewidth=0.5
+)
+
+# === EC zone labels (C1–C4) and qualitative labels ===
+x_centers = [(0 + 250) / 2, (250 + 750) / 2, (750 + 2250) / 2, (2250 + 5000) / 2]
+x_labels = ['C1', 'C2', 'C3', 'C4']
+x_texts = ['Low', 'Medium', 'High', 'Very High']
+for x, c, txt in zip(x_centers, x_labels, x_texts):
+    ax.text(x, -4, c, ha='center', va='top', fontsize=11)
+    ax.text(x, -5.5, txt, ha='center', va='top', fontsize=11, fontweight='normal')
+
+# === SAR class labels (S1–S4) and qualitative labels ===
+y_centers = [5, 14, 22, 32]
+s_labels = ['S1', 'S2', 'S3', 'S4']
+s_texts = ['Low', 'Medium', 'High', 'Very High']
+for y, s, txt in zip(y_centers, s_labels, s_texts):
+    ax.text(-200, y, s, ha='right', va='center', fontsize=11, rotation =90)
+    ax.text(-340, y, txt, ha='right', va='center', fontsize=11, fontweight='normal', rotation =90)
+
+# === Axes and formatting ===
+ax.set_xticks([0, 250, 750, 2250, 5000])
+ax.set_xlabel('Electrical Conductivity (µS/cm)', fontsize=12, labelpad=50)
+ax.set_ylabel('Sodium Adsorption Ratio (SAR)', fontsize=12, labelpad=30)
+#ax.set_title('USSL Diagram with EC and SAR Categories', fontsize=14)
+ax.grid(False)
+ax.legend()
+
+# === Save the plot ===
+plt.savefig('USSL_Diagram_EC_vs_SAR.png', dpi=600, bbox_inches='tight')  # PNG
+plt.savefig('USSL_Diagram_EC_vs_SAR.tiff', dpi=600, bbox_inches='tight', format='tiff', pil_kwargs={'compression': 'tiff_lzw'})  # TIFF
+
+plt.tight_layout()
+plt.show()
+
