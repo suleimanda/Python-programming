@@ -24,3 +24,238 @@ RANDOM_STATE = 42
 df_raw = pd.read_excel("/Users/suleiman/My Drive/Data analyses/Machine learning/df_cleaned.xlsx")
 df_raw
 
+# Renaming some columns
+df_raw = df_raw.rename(columns={
+    'Reservatorio': 'Reservior',
+    'Ano': 'Year',
+    'Mês': 'Month',
+    'Ponto': 'Site',
+    'Data': 'Date',
+    'Temperatura da Água': 'Water Temperature',
+    'Fósforo Total': 'Total Phosphorus',
+    'Fósforo-Ortofosfato': 'Phosphorus-Orthophosphate',
+    'Sulfato Total': 'Total Sulfate',
+    'Turbidez': 'Turbidity',
+    'Oxigênio Dissolvido': 'Dissolved Oxygen',
+    'Carbono Orgânico Total': 'Total Organic Carbon',
+    'Carbono Orgânico Dissolvido': 'Dissolved Organic Carbon',
+    'Condutividade': 'Conductivity',
+    'DBO (5, 20)': 'BOD (5, 20)',
+    'Sólido Total': 'Total Solids', 
+    'Sólido Dissolvido Total': 'Total Dissolved Solids', 
+    'Sólido Suspenso Total': 'Total Suspended Solids',
+    'Nitrogênio Total': 'Total Nitrogen', 
+    'Nitrogênio Amoniacal': 'Ammoniacal Nitrogen',
+    'Nitrogênio-Nitrato': 'Nitrate-Nitrogen',
+    'Nitrogênio Kjeldahl': 'Kjeldahl Nitrogen', 
+    'Nitrogênio-Nitrito': 'Nitrite-Nitrogen', 
+    'Clorofila-a': 'Chlorophyll-a',
+    'Feofitina-a': 'Pheophytin-a', 
+    'Escherichia coli**': 'Escherichia coli', 
+    'Dureza': 'Hardness', 
+    'Sódio': 'Sodium', 
+    'Potássio': 'Potassium',
+    'Cobre Total': 'Total Copper', 
+    'Cloreto Total': 'Total Chloride', 
+    'Fluoreto Total': 'Total Fluoride', 
+    'Níquel Total': 'Total Nickel',
+    'Bário Total': 'Total Barium', 
+    'Mercúrio Total': 'Total Mercury', 
+    'Chumbo Total': 'Total Lead', 
+    'Ferro Total': 'Total Iron',
+    'Ferro Dissolvido': 'Dissolved Iron', 
+    'Alumínio Total': 'Total Aluminium', 
+    'Alumínio Dissolvido': 'Dissolved Aluminium',
+    'Cálcio Total': 'Total Calcium', 
+    'Cobre Dissolvido': 'Dissolved Copper', 
+    'Magnésio Total': 'Total Magnesium', 
+    'Boro Total': 'Total Boron',
+    'Cádmio Total': 'Total Cadmium', 
+    'Crômio Total': 'Total Chromium', 
+    'Manganês Total': 'Total Manganese', 
+    'Zinco Total': 'Total Zinc',
+    'Subst. Tensoat. reagem c/ Azul Metileno': 'Surfactants react with Methylene Blue',
+    'Ens. Ecotoxic. C/ Ceriodaphnia dubia': 'Ecotoxicological Test with Ceriodaphnia dubia', 
+    'Coloração': 'Color',
+    'Chuvas nas últimas 24h': 'Rainfall in the last 24 h', 
+    'Gadolínio antrópico': 'Anthropogenic Gadolinium'
+    
+})
+df_raw 
+
+
+# 2. Clean numeric columns
+#    removing '<'
+#    replacing ',' with '.'
+#    converting to float
+
+categorical_cols = [
+    "Reservior", "Year", "Month", "Site", "Date",
+    "Escherichia coli", "Ecotoxicological Test with Ceriodaphnia dubia",
+    "Color", "Rainfall in the last 24 h",
+]
+
+numeric_cols = [c for c in df_raw.columns if c not in categorical_cols]
+
+def clean_numeric(x):
+    if pd.isna(x):
+        return np.nan
+    x = str(x).strip()
+    x = x.replace("<", "")        # censor sign
+    x = x.replace(",", ".")       # decimal comma
+    x = x.replace(" ", "")
+    if x in ["", "-", "--", "nan", "NaN"]:
+        return np.nan
+    try:
+        return float(x)
+    except Exception:
+        return np.nan
+
+df = df_raw
+for col in numeric_cols:
+    df[col] = df[col].apply(clean_numeric)
+
+# ensure Date is datetime
+if "Date" in df.columns:
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+
+print("Columns and dtypes after cleaning:")
+print(df.dtypes.head())
+
+# ---- Barra Bonita only (both arms) ----
+df_bb = df[df["Reservior"].isin([
+    "BARRA BONITA - RIO PIRACICABA",
+    "BARRA BONITA - RIO TIETÊ"
+])].copy()
+
+# ---- temporal / seasonality features from date ----
+df_bb["month_num"] = df_bb["Date"].dt.month
+df_bb["doy"] = df_bb["Date"].dt.dayofyear
+
+# cyclical encoding
+df_bb["month_sin"] = np.sin(2 * np.pi * df_bb["month_num"] / 12)
+df_bb["month_cos"] = np.cos(2 * np.pi * df_bb["month_num"] / 12)
+df_bb["doy_sin"] = np.sin(2 * np.pi * df_bb["doy"] / 365)
+df_bb["doy_cos"] = np.cos(2 * np.pi * df_bb["doy"] / 365)
+df_bb
+
+## Common feature set (chemistry + temporal)
+chem_features = [
+    "Water Temperature",
+    "pH",
+    "Total Phosphorus",
+    "Ammoniacal Nitrogen",
+    "Nitrate-Nitrogen",
+    "Nitrite-Nitrogen",
+    "Kjeldahl Nitrogen",
+    "Dissolved Oxygen",
+    "Turbidity",
+    "Conductivity",
+    "Total Solids",
+    "Total Dissolved Solids",
+    "Total Chloride",
+    "Total Organic Carbon",
+]
+
+time_features = [
+    "month_sin", "month_cos",
+    "doy_sin", "doy_cos",
+]
+
+# total feature list
+all_features = chem_features + time_features
+
+####### Function to fit a model for one arm (A + B)#####
+
+def fit_arm_model(df_arm, arm_name):
+    X_num = df_arm[all_features] # numeric features
+    X_cat = pd.get_dummies(df_arm[["Year"]], drop_first=True) # year dummy only (month encoded cyclically)
+    X_full = pd.concat([X_num, X_cat], axis=1)
+    y = df_arm["Chlorophyll-a"]
+    df_ml = pd.concat([X_full, y], axis=1).dropna(subset=all_features + ["Chlorophyll-a"])
+    X = df_ml.drop(columns=["Chlorophyll-a"])
+    y = df_ml["Chlorophyll-a"].astype(float)
+    print(f"\n=== {arm_name} ===")
+    print("Rows used:", len(df_ml))
+
+    # -------- log-target model --------
+    y_log = np.log1p(y)
+    X_train, X_test, y_train_log, y_test_log = train_test_split(
+        X, y_log, test_size=0.2, random_state=RANDOM_STATE)
+    gb_log = HistGradientBoostingRegressor(
+        max_depth=3,
+        learning_rate=0.05,
+        max_iter=400,
+        min_samples_leaf=10,
+        l2_regularization=0.1,
+        random_state=RANDOM_STATE,
+    )
+    gb_log.fit(X_train, y_train_log)
+
+    pred_log = gb_log.predict(X_test)
+    y_test_orig = np.expm1(y_test_log)
+    pred_orig = np.expm1(pred_log)
+
+    rmse_log = np.sqrt(mean_squared_error(y_test_log, pred_log))
+    r2_log = r2_score(y_test_log, pred_log)
+    mae_log = mean_absolute_error(y_test_log, pred_log)
+
+    rmse_orig = np.sqrt(mean_squared_error(y_test_orig, pred_orig))
+    r2_orig = r2_score(y_test_orig, pred_orig)
+    mae_orig = mean_absolute_error(y_test_orig, pred_orig)
+
+    print("Log-target model:")
+    print(f"  LOG  -> RMSE = {rmse_log:.3f}, R2 = {r2_log:.3f}, MAE = {mae_log:.3f}")
+    print(f"  Orig -> RMSE = {rmse_orig:.3f}, R2 = {r2_orig:.3f}, MAE = {mae_orig:.3f}")
+
+    # -------- robust original-target model --------
+    X_train_o, X_test_o, y_train_o, y_test_o = train_test_split(
+        X, y, test_size=0.2, random_state=RANDOM_STATE
+    )
+
+    gb_orig = HistGradientBoostingRegressor(
+        loss="absolute_error",
+        max_depth=3,
+        learning_rate=0.05,
+        max_iter=400,
+        min_samples_leaf=10,
+        l2_regularization=0.1,
+        random_state=RANDOM_STATE,
+    )
+    gb_orig.fit(X_train_o, y_train_o)
+
+    pred_o = gb_orig.predict(X_test_o)
+
+    rmse_o = np.sqrt(mean_squared_error(y_test_o, pred_o))
+    r2_o = r2_score(y_test_o, pred_o)
+    mae_o = mean_absolute_error(y_test_o, pred_o)
+
+    print("Original-target abs-loss model:")
+    print(f"  RMSE = {rmse_o:.3f}, R2 = {r2_o:.3f}, MAE = {mae_o:.3f}")
+
+    return {
+        "X_train": X_train,
+        "X_test": X_test,
+        "y_train_log": y_train_log,
+        "y_test_log": y_test_log,
+        "y_test_orig": y_test_orig,
+        "pred_log": pred_log,
+        "pred_orig": pred_orig,
+        "gb_log": gb_log,
+        "X_train_o": X_train_o,
+        "X_test_o": X_test_o,
+        "y_train_o": y_train_o,
+        "y_test_o": y_test_o,
+        "pred_o": pred_o,
+        "gb_orig": gb_orig,
+        "features": X.columns,
+    }
+# Running the model for each arm of the reservior
+res_tiete = fit_arm_model(
+    df_bb[df_bb["Reservior"] == "BARRA BONITA - RIO TIETÊ"],
+    "BARRA BONITA - RIO TIETÊ"
+)
+res_piracicaba = fit_arm_model(
+    df_bb[df_bb["Reservior"] == "BARRA BONITA - RIO PIRACICABA"],
+    "BARRA BONITA - RIO PIRACICABA"
+)
